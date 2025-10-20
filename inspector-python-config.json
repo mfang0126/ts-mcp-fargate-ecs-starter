@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "hello-mcp-python-local": {
+      "url": "http://localhost:3000/sse",
+      "transport": "sse",
+      "headers": {
+        "Authorization": "Bearer mcp-secret-token-12345"
+      }
+    }
+  }
+}

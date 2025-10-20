@@ -1,0 +1,6 @@
+# Install FastMCP from GitHub (not yet on PyPI)
+git+https://github.com/jlowin/fastmcp.git
+
+# Dependencies
+uvicorn>=0.30.0
+pydantic>=2.0.0
