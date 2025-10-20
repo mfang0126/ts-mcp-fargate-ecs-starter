@@ -1,4 +1,4 @@
-# Hello MCP Server - Python FastMCP
+# XPlan Python MCP Server
 
 Python implementation of MCP server for AWS Fargate ECS deployment using FastMCP.
 
@@ -7,7 +7,8 @@ Python implementation of MCP server for AWS Fargate ECS deployment using FastMCP
 - ✅ **FastMCP Python**: Native Python MCP framework
 - ✅ **Simple & Clean**: ~60 lines of Python code
 - ✅ **Type Hints**: Full typing support with Pydantic
-- ✅ **SSE Transport**: Built-in Server-Sent Events
+- ✅ **HTTP Streaming**: Built-in HTTP streaming with SSE fallback
+- ✅ **Dual Endpoints**: Both `/mcp` (HTTP) and `/sse` (SSE) available
 - ✅ **Bearer Token Auth**: Secure API access
 - ✅ **Container Ready**: Optimized for Docker/Fargate
 - ✅ **Multiple Tools**: sayHello, addNumbers, getServerInfo
@@ -40,30 +41,41 @@ pip install -r requirements.txt
 python server.py
 
 # Server runs on http://0.0.0.0:3000
+# Provides both /mcp (HTTP streaming) and /sse (SSE) endpoints
 ```
 
 **Note**: FastMCP is currently installed from GitHub as it's not yet published to PyPI.
 
 ### Test with curl
 
+The server provides **two endpoints**:
+- **`/mcp`** - HTTP streaming (recommended)
+- **`/sse`** - Server-Sent Events (fallback)
+
 ```bash
-# Initialize MCP
-curl -X POST http://localhost:3000/sse \
+# Using /mcp endpoint (HTTP streaming - recommended)
+curl -X POST http://localhost:3000/mcp \
   -H "Authorization: Bearer mcp-secret-token-12345" \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}'
 
 # List tools
-curl -X POST http://localhost:3000/sse \
+curl -X POST http://localhost:3000/mcp \
   -H "Authorization: Bearer mcp-secret-token-12345" \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
 
 # Call sayHello tool
-curl -X POST http://localhost:3000/sse \
+curl -X POST http://localhost:3000/mcp \
   -H "Authorization: Bearer mcp-secret-token-12345" \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"say_hello","arguments":{"name":"Python"}}}'
+
+# Alternative: Using /sse endpoint (Server-Sent Events)
+curl -X POST http://localhost:3000/sse \
+  -H "Authorization: Bearer mcp-secret-token-12345" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
 ```
 
 ## 🐳 Docker
@@ -71,7 +83,7 @@ curl -X POST http://localhost:3000/sse \
 ### Build Image
 
 ```bash
-docker build -t hello-mcp-python .
+docker build -t xplan-python-mcp .
 ```
 
 ### Run Container
@@ -79,7 +91,7 @@ docker build -t hello-mcp-python .
 ```bash
 docker run -p 3000:3000 \
   -e BEARER_TOKEN=mcp-secret-token-12345 \
-  hello-mcp-python
+  xplan-python-mcp
 ```
 
 ## 🔧 Available Tools
@@ -113,12 +125,32 @@ Get information about the running server.
 
 ## 🧪 Testing with MCP Inspector
 
-Create or use the existing `inspector-python-config.json`:
+The server provides two endpoints for testing:
+
+### HTTP Streaming (Recommended)
+
+Use the existing `inspector-python-config.json`:
 
 ```json
 {
   "mcpServers": {
-    "hello-mcp-python-local": {
+    "xplan-python-mcp-local": {
+      "url": "http://localhost:3000/mcp",
+      "transport": "http",
+      "headers": {
+        "Authorization": "Bearer mcp-secret-token-12345"
+      }
+    }
+  }
+}
+```
+
+### SSE Fallback
+
+```json
+{
+  "mcpServers": {
+    "xplan-python-mcp-local": {
       "url": "http://localhost:3000/sse",
       "transport": "sse",
       "headers": {
@@ -141,7 +173,7 @@ For detailed deployment instructions to AWS Fargate ECS, see [README-PYTHON.md](
 ## 📁 Project Structure
 
 ```
-hello-mcp/
+xplan-mcp/
 ├── server.py                      # FastMCP server implementation
 ├── requirements.txt               # Python dependencies
 ├── Dockerfile                     # Container definition

@@ -1,5 +1,5 @@
 """
-Hello MCP Server - Python FastMCP Implementation
+XPlan Python MCP Server - FastMCP Implementation
 Simple MCP server for AWS Fargate ECS deployment using FastMCP
 """
 
@@ -7,7 +7,7 @@ import os
 from fastmcp import FastMCP
 
 # Create FastMCP server
-mcp = FastMCP("hello-mcp-python", version="1.0.0")
+mcp = FastMCP("xplan-python-mcp", version="1.0.0")
 
 
 @mcp.tool()
@@ -48,7 +48,7 @@ def get_server_info() -> dict:
         Server information including version and environment
     """
     return {
-        "name": "hello-mcp-python",
+        "name": "xplan-python-mcp",
         "version": "1.0.0",
         "language": "Python",
         "framework": "FastMCP",
@@ -62,9 +62,10 @@ if __name__ == "__main__":
     port = int(os.getenv("PORT", "3000"))
     bearer_token = os.getenv("BEARER_TOKEN", "mcp-secret-token-12345")
 
-    # Run server with HTTP transport
+    # Run server with HTTP streaming transport
+    # This provides both /mcp (HTTP streaming) and /sse (SSE) endpoints
     mcp.run(
-        transport="sse",
+        transport="http",
         host="0.0.0.0",  # Listen on all interfaces for container access
         port=port,
         bearer_token=bearer_token

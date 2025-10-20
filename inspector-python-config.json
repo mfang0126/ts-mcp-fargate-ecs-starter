@@ -1,8 +1,8 @@
 {
   "mcpServers": {
-    "hello-mcp-python-local": {
-      "url": "http://localhost:3000/sse",
-      "transport": "sse",
+    "xplan-python-mcp-local": {
+      "url": "http://localhost:3000/mcp",
+      "transport": "http",
       "headers": {
         "Authorization": "Bearer mcp-secret-token-12345"
       }
