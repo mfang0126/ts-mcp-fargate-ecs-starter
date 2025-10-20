@@ -10,7 +10,7 @@ This document compares the two implementations of the Hello MCP Server: Lambda a
 ### Branches
 
 1. **feature/lambda-mcp-server** - Lambda implementation with JSON-RPC 2.0
-2. **feature/fargate-ecs-mcp-server** - Fargate ECS implementation with Express.js
+2. **feature/fargate-ecs-mcp-server** - Fargate ECS implementation with FastMCP
 
 ## Implementation Comparison
 
@@ -49,15 +49,20 @@ Internet → API Gateway HTTP API v2 → Lambda Function → JSON-RPC Handler
 
 **Architecture**:
 ```
-Internet → ALB → Fargate Task → Express.js → JSON-RPC Handler
+Internet → ALB → Fargate Task → FastMCP Server → HTTP Streaming
 ```
 
+**Technology**: FastMCP framework with built-in HTTP streaming
+
 **Pros**:
-- ✅ Native Express.js - no adapter needed
+- ✅ FastMCP framework - built for MCP protocol
+- ✅ Ultra simple - only ~50 lines of code (vs 210 with Express)
 - ✅ No cold starts - always warm
-- ✅ Native HTTP support for MCP Inspector
-- ✅ Simpler codebase - standard web server
-- ✅ Better for long-running connections
+- ✅ Native HTTP streaming and SSE support
+- ✅ Built-in authentication
+- ✅ Stateless mode for containers
+- ✅ Minimal dependencies (just fastmcp + zod)
+- ✅ MCP Inspector ready out of the box
 - ✅ Easier local development and testing
 - ✅ Standard Node.js debugging
 
@@ -68,9 +73,10 @@ Internet → ALB → Fargate Task → Express.js → JSON-RPC Handler
 - ❌ Always running (not pay-per-request)
 
 **Current Status**:
-- ✅ Fully implemented and tested locally
+- ✅ Fully implemented with FastMCP
 - ✅ All MCP methods working (initialize, tools/list, tools/call)
-- ✅ Docker container built and tested
+- ✅ SSE streaming tested and working
+- ✅ Authentication working
 - ⏳ Not yet deployed to AWS
 - ⏳ CDK/App Runner infrastructure pending
 
@@ -204,13 +210,13 @@ docker push YOUR_ECR_URL/hello-mcp-fargate:latest
 - `FARGATE_PLAN.md` - Fargate planning doc
 
 ### Fargate Branch
-- `server.ts` - Express MCP server
+- `server.ts` - FastMCP server (~50 lines!)
 - `Dockerfile` - Container definition
-- `README-FARGATE.md` - Fargate documentation
-- `package.json` - Updated with start scripts
+- `README-FARGATE.md` - Fargate documentation with FastMCP guide
+- `package.json` - Minimal dependencies (fastmcp, zod)
 
 ### Shared Files
-- `package.json` - Dependencies (MCP SDK, Express, Zod)
+- `package.json` - Dependencies (fastmcp, zod)
 - `tsconfig.json` - TypeScript configuration
 - `index.ts` - Local stdio MCP server (unchanged)
 - `.gitignore` - Git ignore patterns
@@ -219,10 +225,12 @@ docker push YOUR_ECR_URL/hello-mcp-fargate:latest
 
 1. **MCP Transport Matters**: Simple HTTP POST works for basic clients, but MCP Inspector requires StreamableHTTP or SSE
 2. **Lambda Complexity**: Lambda + API Gateway requires careful event format handling (v1 vs v2)
-3. **Express Simplicity**: Native Express.js is much simpler than Lambda adapters
-4. **Cost vs Simplicity**: Sometimes paying $7/month more is worth the reduced complexity
-5. **Local Testing**: Fargate approach allows standard `npm start` vs SAM local invoke
-6. **Tool Selection**: MCP Inspector is picky about transport - test early with target tools
+3. **FastMCP Wins**: FastMCP is specifically built for MCP servers - 75% less code than Express
+4. **Framework Selection**: Use the right tool for the job - FastMCP > Express > Manual JSON-RPC
+5. **Cost vs Simplicity**: Sometimes paying $7/month more is worth the reduced complexity
+6. **Local Testing**: Fargate approach allows standard `npm start` vs SAM local invoke
+7. **Tool Selection**: MCP Inspector is picky about transport - test early with target tools
+8. **Built-in Features**: FastMCP includes HTTP streaming, SSE, authentication, and stateless mode
 
 ## Conclusion
 

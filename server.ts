@@ -1,216 +1,53 @@
-import express from 'express';
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-} from '@modelcontextprotocol/sdk/types.js';
-import { z } from 'zod';
+import { FastMCP } from "fastmcp";
+import { z } from "zod";
 
-const app = express();
-app.use(express.json());
-
-// Bearer token authentication
-const BEARER_TOKEN = process.env.BEARER_TOKEN || 'mcp-secret-token-12345';
-
-function authenticate(req: express.Request): boolean {
-  const authHeader = req.headers.authorization;
-  if (!authHeader) return false;
-  const token = authHeader.replace('Bearer ', '');
-  return token === BEARER_TOKEN;
-}
-
-// Create MCP Server
-function createServer() {
-  const server = new Server(
-    {
-      name: 'hello-mcp-fargate',
-      version: '1.0.0',
-    },
-    {
-      capabilities: {
-        tools: {},
-      },
-    }
-  );
-
-  // Register sayHello tool
-  server.setRequestHandler(ListToolsRequestSchema, async () => {
-    return {
-      tools: [
-        {
-          name: 'sayHello',
-          description: 'Greet someone by name',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              name: {
-                type: 'string',
-                description: 'The name of the person to greet',
-              },
-            },
-            required: ['name'],
-          },
-        },
-      ],
-    };
-  });
-
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    if (request.params.name === 'sayHello') {
-      const nameSchema = z.object({
-        name: z.string(),
-      });
-
-      const args = nameSchema.parse(request.params.arguments);
-
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Hello, ${args.name}! 👋`,
-          },
-        ],
-      };
-    }
-
-    throw new Error(`Unknown tool: ${request.params.name}`);
-  });
-
-  return server;
-}
-
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    version: '1.0.0'
-  });
+// Create FastMCP server
+const server = new FastMCP({
+  name: "hello-mcp-fargate",
+  version: "1.0.0",
 });
 
-// MCP endpoint
-app.post('/mcp', async (req, res) => {
-  // Authentication
-  if (!authenticate(req)) {
-    return res.status(401).json({
-      jsonrpc: '2.0',
-      error: {
-        code: -32000,
-        message: 'Unauthorized - Valid Bearer token required',
-      },
-    });
-  }
+// Register sayHello tool
+server.addTool({
+  name: "sayHello",
+  description: "Greet someone by name",
+  parameters: z.object({
+    name: z.string().describe("The name of the person to greet"),
+  }),
+  execute: async (args) => {
+    return `Hello, ${args.name}! 👋`;
+  },
+});
 
-  try {
-    const request = req.body;
+// Get configuration from environment
+const PORT = parseInt(process.env.PORT || "3000");
+const BEARER_TOKEN = process.env.BEARER_TOKEN || "mcp-secret-token-12345";
 
-    // Initialize
-    if (request.method === 'initialize') {
-      return res.json({
-        jsonrpc: '2.0',
-        id: request.id,
-        result: {
-          protocolVersion: '2024-11-05',
-          serverInfo: {
-            name: 'hello-mcp-fargate',
-            version: '1.0.0',
-          },
-          capabilities: {
-            tools: {},
-          },
-        },
-      });
-    }
-
-    // List tools
-    if (request.method === 'tools/list') {
-      return res.json({
-        jsonrpc: '2.0',
-        id: request.id,
-        result: {
-          tools: [
-            {
-              name: 'sayHello',
-              description: 'Greet someone by name',
-              inputSchema: {
-                type: 'object',
-                properties: {
-                  name: {
-                    type: 'string',
-                    description: 'The name of the person to greet',
-                  },
-                },
-                required: ['name'],
-              },
-            },
-          ],
-        },
-      });
-    }
-
-    // Call tool
-    if (request.method === 'tools/call') {
-      const { name, arguments: args } = request.params;
-
-      if (name === 'sayHello') {
-        const nameSchema = z.object({
-          name: z.string(),
-        });
-
-        const validatedArgs = nameSchema.parse(args);
-
-        return res.json({
-          jsonrpc: '2.0',
-          id: request.id,
-          result: {
-            content: [
-              {
-                type: 'text',
-                text: `Hello, ${validatedArgs.name}! 👋`,
-              },
-            ],
-          },
-        });
+// Start HTTP streaming server with stateless mode for containerization
+server.start({
+  transportType: "httpStream",
+  httpStream: {
+    port: PORT,
+    endpoint: "/mcp",
+    stateless: true, // Enable stateless mode for containerized deployments
+    authenticate: async (headers) => {
+      // Bearer token authentication
+      const authHeader = headers.authorization || headers.Authorization;
+      if (!authHeader) {
+        throw new Error("Missing Authorization header");
       }
 
-      return res.status(400).json({
-        jsonrpc: '2.0',
-        id: request.id,
-        error: {
-          code: -32602,
-          message: `Unknown tool: ${name}`,
-        },
-      });
-    }
+      const token = authHeader.replace("Bearer ", "");
+      if (token !== BEARER_TOKEN) {
+        throw new Error("Invalid bearer token");
+      }
 
-    // Unknown method
-    return res.status(400).json({
-      jsonrpc: '2.0',
-      id: request.id,
-      error: {
-        code: -32601,
-        message: `Method not found: ${request.method}`,
-      },
-    });
-  } catch (error: any) {
-    console.error('MCP request error:', error);
-    return res.status(500).json({
-      jsonrpc: '2.0',
-      id: req.body?.id,
-      error: {
-        code: -32603,
-        message: 'Internal error',
-        data: error.message,
-      },
-    });
-  }
+      return true;
+    },
+  },
 });
 
-// Start server
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`🚀 MCP Server running on port ${PORT}`);
-  console.log(`📍 Health check: http://localhost:${PORT}/health`);
-  console.log(`📍 MCP endpoint: http://localhost:${PORT}/mcp`);
-});
+console.log(`🚀 FastMCP Server running on port ${PORT}`);
+console.log(`📍 MCP endpoint: http://localhost:${PORT}/mcp`);
+console.log(`📍 SSE endpoint: http://localhost:${PORT}/sse`);
+console.log(`📍 Stateless mode: enabled`);
