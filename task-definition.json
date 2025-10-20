@@ -1,0 +1,38 @@
+{
+  "family": "hello-mcp-task",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+  "containerDefinitions": [
+    {
+      "name": "hello-mcp-container",
+      "image": "670326884047.dkr.ecr.ap-southeast-2.amazonaws.com/hello-mcp-fargate:latest",
+      "portMappings": [
+        {
+          "containerPort": 3000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "PORT",
+          "value": "3000"
+        },
+        {
+          "name": "BEARER_TOKEN",
+          "value": "mcp-secret-token-12345"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/hello-mcp",
+          "awslogs-region": "ap-southeast-2",
+          "awslogs-stream-prefix": "mcp"
+        }
+      }
+    }
+  ],
+  "executionRoleArn": "arn:aws:iam::670326884047:role/ecsTaskExecutionRole"
+}

@@ -27,6 +27,7 @@ const BEARER_TOKEN = process.env.BEARER_TOKEN || "mcp-secret-token-12345";
 server.start({
   transportType: "httpStream",
   httpStream: {
+    host: "0.0.0.0", // Listen on all interfaces for container access
     port: PORT,
     endpoint: "/mcp",
     stateless: true, // Enable stateless mode for containerized deployments
