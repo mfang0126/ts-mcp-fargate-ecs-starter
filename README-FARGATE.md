@@ -114,6 +114,251 @@ server.start({
 - ✅ Built-in authentication
 - ✅ Stateless mode for containers
 
+## AWS Fargate ECS Deployment Tutorial
+
+### Prerequisites
+
+- AWS CLI configured with appropriate credentials
+- Docker installed locally
+- AWS account with permissions for ECR, ECS, ALB, and IAM
+
+### Step-by-Step Deployment Guide
+
+#### 1. Create ECR Repository
+
+```bash
+# Set your AWS region
+REGION="ap-southeast-2"
+
+# Create ECR repository
+aws ecr create-repository \
+  --repository-name hello-mcp-fargate \
+  --region $REGION
+```
+
+#### 2. Build and Push Docker Image
+
+**Important**: Build for AMD64 platform (Fargate requirement):
+
+```bash
+# Get your AWS account ID
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+
+# Build for AMD64 platform
+docker buildx build --platform linux/amd64 \
+  -t ${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/hello-mcp-fargate:latest . \
+  --load
+
+# Login to ECR
+aws ecr get-login-password --region $REGION | \
+  docker login --username AWS --password-stdin ${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com
+
+# Push image
+docker push ${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/hello-mcp-fargate:latest
+```
+
+#### 3. Create ECS Cluster
+
+```bash
+aws ecs create-cluster \
+  --cluster-name hello-mcp-cluster \
+  --region $REGION
+```
+
+#### 4. Create Security Groups
+
+```bash
+# Get default VPC ID
+VPC_ID=$(aws ec2 describe-vpcs \
+  --filters "Name=isDefault,Values=true" \
+  --query 'Vpcs[0].VpcId' \
+  --output text \
+  --region $REGION)
+
+# Create ALB security group
+ALB_SG=$(aws ec2 create-security-group \
+  --group-name hello-mcp-alb-sg \
+  --description "Security group for Hello MCP ALB" \
+  --vpc-id $VPC_ID \
+  --region $REGION \
+  --query 'GroupId' \
+  --output text)
+
+# Allow HTTP traffic to ALB
+aws ec2 authorize-security-group-ingress \
+  --group-id $ALB_SG \
+  --protocol tcp \
+  --port 80 \
+  --cidr 0.0.0.0/0 \
+  --region $REGION
+
+# Create ECS security group
+ECS_SG=$(aws ec2 create-security-group \
+  --group-name hello-mcp-ecs-sg \
+  --description "Security group for Hello MCP ECS tasks" \
+  --vpc-id $VPC_ID \
+  --region $REGION \
+  --query 'GroupId' \
+  --output text)
+
+# Allow traffic from ALB to ECS on port 3000
+aws ec2 authorize-security-group-ingress \
+  --group-id $ECS_SG \
+  --protocol tcp \
+  --port 3000 \
+  --source-group $ALB_SG \
+  --region $REGION
+```
+
+#### 5. Create Application Load Balancer
+
+```bash
+# Get default subnets
+SUBNETS=$(aws ec2 describe-subnets \
+  --filters "Name=vpc-id,Values=$VPC_ID" \
+  --query 'Subnets[*].SubnetId' \
+  --output text \
+  --region $REGION | tr '\t' ' ')
+
+# Create ALB
+ALB_ARN=$(aws elbv2 create-load-balancer \
+  --name hello-mcp-alb \
+  --subnets $SUBNETS \
+  --security-groups $ALB_SG \
+  --region $REGION \
+  --query 'LoadBalancers[0].LoadBalancerArn' \
+  --output text)
+
+# Get ALB DNS name
+ALB_DNS=$(aws elbv2 describe-load-balancers \
+  --load-balancer-arns $ALB_ARN \
+  --query 'LoadBalancers[0].DNSName' \
+  --output text \
+  --region $REGION)
+
+echo "ALB DNS: http://$ALB_DNS"
+
+# Create target group
+TG_ARN=$(aws elbv2 create-target-group \
+  --name hello-mcp-tg \
+  --protocol HTTP \
+  --port 3000 \
+  --vpc-id $VPC_ID \
+  --target-type ip \
+  --health-check-path /mcp \
+  --health-check-interval-seconds 30 \
+  --health-check-timeout-seconds 5 \
+  --healthy-threshold-count 2 \
+  --unhealthy-threshold-count 3 \
+  --matcher HttpCode=200-499 \
+  --region $REGION \
+  --query 'TargetGroups[0].TargetGroupArn' \
+  --output text)
+
+# Create listener
+aws elbv2 create-listener \
+  --load-balancer-arn $ALB_ARN \
+  --protocol HTTP \
+  --port 80 \
+  --default-actions Type=forward,TargetGroupArn=$TG_ARN \
+  --region $REGION
+```
+
+#### 6. Create IAM Role for ECS Task Execution
+
+```bash
+# Create trust policy file
+cat > ecs-trust-policy.json <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "ecs-tasks.amazonaws.com"
+      },
+      "Action": "sts:AssumeRole"
+    }
+  ]
+}
+EOF
+
+# Create IAM role
+aws iam create-role \
+  --role-name ecsTaskExecutionRole \
+  --assume-role-policy-document file://ecs-trust-policy.json
+
+# Attach managed policy
+aws iam attach-role-policy \
+  --role-name ecsTaskExecutionRole \
+  --policy-arn arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+```
+
+#### 7. Create CloudWatch Log Group
+
+```bash
+aws logs create-log-group \
+  --log-group-name /ecs/hello-mcp \
+  --region $REGION
+```
+
+#### 8. Register Task Definition
+
+Update `task-definition.json` with your account ID and region, then:
+
+```bash
+aws ecs register-task-definition \
+  --cli-input-json file://task-definition.json \
+  --region $REGION
+```
+
+#### 9. Create ECS Service
+
+```bash
+# Get subnet IDs for service
+SUBNET_IDS=$(echo $SUBNETS | tr ' ' ',')
+
+# Create service
+aws ecs create-service \
+  --cluster hello-mcp-cluster \
+  --service-name hello-mcp-service \
+  --task-definition hello-mcp-task \
+  --desired-count 1 \
+  --launch-type FARGATE \
+  --network-configuration "awsvpcConfiguration={subnets=[$SUBNET_IDS],securityGroups=[$ECS_SG],assignPublicIp=ENABLED}" \
+  --load-balancers "targetGroupArn=$TG_ARN,containerName=hello-mcp-container,containerPort=3000" \
+  --region $REGION
+```
+
+#### 10. Test the Deployment
+
+Wait 2-3 minutes for the service to start, then test:
+
+```bash
+# Test tools/list
+curl -X POST "http://$ALB_DNS/mcp" \
+  -H "Authorization: Bearer mcp-secret-token-12345" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+
+# Test sayHello tool
+curl -X POST "http://$ALB_DNS/mcp" \
+  -H "Authorization: Bearer mcp-secret-token-12345" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"sayHello","arguments":{"name":"World"}}}'
+```
+
+### Cleanup
+
+To delete all AWS resources and avoid charges:
+
+```bash
+chmod +x cleanup-aws.sh
+./cleanup-aws.sh
+```
+
 ## AWS Deployment Options
 
 ### Option 1: AWS App Runner (Recommended - Simplest)
