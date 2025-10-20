@@ -1,22 +1,20 @@
-FROM node:20-alpine
+FROM python:3.11-slim
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Copy requirements and install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Install dependencies
-RUN npm ci --only=production
-
-# Copy source files
-COPY server.ts ./
+# Copy server code
+COPY server.py .
 
 # Expose port
 EXPOSE 3000
 
 # Set environment variables
 ENV PORT=3000
-ENV NODE_ENV=production
+ENV PYTHONUNBUFFERED=1
 
-# Start FastMCP server with npx
-CMD ["npx", "tsx", "server.ts"]
+# Run FastMCP server
+CMD ["python", "server.py"]
