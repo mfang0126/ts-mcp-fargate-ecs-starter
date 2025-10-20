@@ -183,6 +183,8 @@ FastMCP provides native HTTP streaming support with SSE fallback:
 - Primary endpoint: `/mcp` (HTTP streaming)
 - Fallback endpoint: `/sse` (Server-Sent Events)
 
+**📖 For detailed transport usage examples, see [TRANSPORT_GUIDE.md](./TRANSPORT_GUIDE.md)**
+
 ### Stateless Mode
 Perfect for containerized deployments:
 ```typescript
