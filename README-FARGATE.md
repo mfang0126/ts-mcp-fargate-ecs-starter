@@ -30,6 +30,16 @@ npm start
 # Server runs on http://localhost:3000
 ```
 
+### Testing
+
+```bash
+# Test local server with MCP Inspector
+npm run test:local
+
+# Test deployed Fargate server with MCP Inspector
+npm run test:fargate
+```
+
 ### Test Endpoints
 
 FastMCP requires the `Accept` header for streaming:
@@ -334,6 +344,13 @@ aws ecs create-service \
 
 Wait 2-3 minutes for the service to start, then test:
 
+**With MCP Inspector** (easiest):
+```bash
+# Update inspector-fargate-config.json with your ALB DNS, then:
+npm run test:fargate
+```
+
+**With curl**:
 ```bash
 # Test tools/list
 curl -X POST "http://$ALB_DNS/mcp" \
@@ -452,11 +469,49 @@ authenticate: async (headers) => {
 
 ## Testing with MCP Inspector
 
+### Local Testing
+
+Test the local server (requires `npm start` running):
+
+```bash
+npm run test:local
+```
+
+This opens MCP Inspector connected to `http://localhost:3000/mcp`.
+
+### Fargate Testing
+
+Test the deployed Fargate server:
+
+```bash
+npm run test:fargate
+```
+
+This opens MCP Inspector connected to your ALB endpoint.
+
+### Manual Configuration
+
+**Local Server** (`inspector-config.json`):
+```json
+{
+  "mcpServers": {
+    "hello-mcp-local": {
+      "url": "http://localhost:3000/mcp",
+      "transport": "http",
+      "headers": {
+        "Authorization": "Bearer mcp-secret-token-12345"
+      }
+    }
+  }
+}
+```
+
+**Fargate Server** (`inspector-fargate-config.json`):
 ```json
 {
   "mcpServers": {
     "hello-mcp-fargate": {
-      "url": "http://localhost:3000/mcp",
+      "url": "http://hello-mcp-alb-661567224.ap-southeast-2.elb.amazonaws.com/mcp",
       "transport": "http",
       "headers": {
         "Authorization": "Bearer mcp-secret-token-12345"

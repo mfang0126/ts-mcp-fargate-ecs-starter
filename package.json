@@ -10,7 +10,9 @@
     "build:lambda": "tsc && cp package.json dist/",
     "deploy": "npm run build:lambda && sam deploy",
     "start": "tsx server.ts",
-    "start:prod": "npm run build && node dist/server.js"
+    "start:prod": "npm run build && node dist/server.js",
+    "test:local": "npx @modelcontextprotocol/inspector inspector-config.json",
+    "test:fargate": "npx @modelcontextprotocol/inspector inspector-fargate-config.json"
   },
   "keywords": [
     "mcp",
