@@ -8,7 +8,9 @@
     "dev": "npx fastmcp dev index.ts",
     "build": "tsc",
     "build:lambda": "tsc && cp package.json dist/",
-    "deploy": "npm run build:lambda && sam deploy"
+    "deploy": "npm run build:lambda && sam deploy",
+    "start": "tsx server.ts",
+    "start:prod": "npm run build && node dist/server.js"
   },
   "keywords": [
     "mcp",
